@@ -1,0 +1,91 @@
+name: Build dinput8.dll
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache DirectX SDK installer
+        id: cache-dxsdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\DXSDK_Jun10.exe
+          key: dxsdk-jun10-installer
+
+      - name: Download DirectX SDK June 2010
+        if: steps.cache-dxsdk.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $url = "https://download.microsoft.com/download/a/e/7/ae743f1f-632b-4809-87a9-aa1bb3458e31/DXSDK_Jun10.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\DXSDK_Jun10.exe"
+
+      - name: Install DirectX SDK June 2010
+        shell: pwsh
+        run: |
+          # Workaround for S1023 error: remove conflicting VC++ 2010 Redist
+          # entries before installing the SDK.
+          $regs = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )
+          foreach ($root in $regs) {
+            if (Test-Path $root) {
+              Get-ChildItem $root | ForEach-Object {
+                $name = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName
+                if ($name -match 'Microsoft Visual C\+\+ 2010.*Redistributable') {
+                  Write-Host "Removing conflicting redist: $name"
+                  $uninstall = (Get-ItemProperty $_.PSPath).UninstallString
+                  if ($uninstall) {
+                    Start-Process "cmd.exe" -ArgumentList "/c $uninstall /quiet" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+                  }
+                }
+              }
+            }
+          }
+          Start-Process -FilePath "$env:RUNNER_TEMP\DXSDK_Jun10.exe" `
+            -ArgumentList "/U" -Wait -NoNewWindow
+          $dxdir = "C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\"
+          if (-Not (Test-Path $dxdir)) {
+            throw "DirectX SDK installation failed: $dxdir not found"
+          }
+          echo "DXSDK_DIR=$dxdir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "DXSDK_DIR=$dxdir"
+
+      - name: Configure CMake (Win32 Release)
+        run: cmake -B build86 -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build
+        run: cmake --build build86 --config Release --parallel
+
+      - name: Locate built DLL
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build86 -Recurse -Filter dinput8.dll | Select-Object -First 1
+          if (-Not $dll) { throw "dinput8.dll not found after build" }
+          Write-Host "Built: $($dll.FullName)  ($([math]::Round($dll.Length/1MB,2)) MB)"
+          Copy-Item $dll.FullName -Destination "$env:GITHUB_WORKSPACE\dinput8.dll"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dinput8.dll
+          path: dinput8.dll
+          if-no-files-found: error
+
+      - name: Attach to release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dinput8.dll
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
