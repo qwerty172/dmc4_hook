@@ -1,0 +1,16 @@
+build86/
+lsp/
+i18n/mo
+.clangd/
+.cache/
+.vs/
+.vscode/
+lsp.bat
+src/Config.hpp
+compile_commands.json
+
+# Replit-specific
+.local/
+.agents/
+.replit
+replit.nix
