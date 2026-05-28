@@ -27,7 +27,7 @@ volatile int         NeroComboBBuff::s_stun_int_factor = 20;
 // edx = pointer to attack-source data; kAttackStatus_v3 lives at [edx+0xA4].
 // mHitStopTimer is at kAttackStatus_v3+0x28, so at [edx+0xA4+0x28].
 // ---------------------------------------------------------------------------
-static __declspec(naked) void nero_stun_detour() {
+naked void nero_stun_detour() {
     _asm {
         cmp byte ptr [NeroComboBBuff::s_combo_b_active], 1
         jne dochain
