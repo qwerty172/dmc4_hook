@@ -172,7 +172,7 @@ static void compute_and_apply(uEnemy* enemy, uPlayer* player,
 // a naked detour that preserves all registers, refreshes the activity counter,
 // then jumps through MinHook's auto-generated trampoline.
 // ---------------------------------------------------------------------------
-static __declspec(naked) void honeycomb_detour() {
+naked void honeycomb_detour() {
     _asm {
         pushad
         pushfd
